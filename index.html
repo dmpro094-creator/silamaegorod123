@@ -54,25 +54,49 @@
     margin:-3px 0 0 -3px; border-radius:50%; background:rgba(255,255,255,0.85);
     box-shadow:0 0 0 1px rgba(0,0,0,0.4);
   }
-  #hint {
-    position:absolute; bottom:18px; left:50%; transform:translateX(-50%);
-    color:#fff; font-size:12px; background:rgba(0,0,0,0.35); padding:6px 14px;
-    border-radius:20px; letter-spacing:0.3px;
-  }
   #interactHint {
     position:absolute; top:56%; left:50%; transform:translate(-50%,0);
     color:#fff; font-size:13px; background:rgba(0,0,0,0.55); padding:5px 12px;
     border-radius:8px; display:none;
   }
-  #topLeft { position:absolute; top:14px; left:14px; color:#fff; font-size:12px; background:rgba(0,0,0,0.35); padding:8px 12px; border-radius:8px; line-height:1.6; }
-  #topLeft b { color:#9fd3ff; }
 
-  #controls { position:fixed; top:14px; right:14px; z-index:25; display:none; gap:8px; }
-  .micBtn {
-    pointer-events:all; padding:10px 14px; background:rgba(20,26,40,0.75); color:#fff; font-size:13px;
-    border:1px solid rgba(255,255,255,0.12);
+  #infoWrap { position:absolute; top:14px; left:14px; pointer-events:all; }
+  #infoBtn {
+    width:28px; height:28px; border-radius:50%; display:flex; align-items:center; justify-content:center;
+    background:rgba(20,26,40,0.75); color:#fff; font-size:13px; font-style:italic; font-family:Georgia,serif;
+    border:1px solid rgba(255,255,255,0.15); cursor:default; user-select:none;
   }
-  .micBtn.on { background:#2c8a4b; }
+  #infoPanel {
+    display:none; position:absolute; top:36px; left:0; min-width:220px;
+    background:rgba(10,14,24,0.9); color:#fff; font-size:12px; padding:10px 12px; border-radius:8px; line-height:1.6;
+    white-space:nowrap;
+  }
+  #infoWrap:hover #infoPanel { display:block; }
+  #infoPanel b { color:#9fd3ff; }
+
+  #controls { position:fixed; top:14px; right:14px; z-index:25; display:none; gap:8px; align-items:center; }
+  #micBtn {
+    pointer-events:all; width:30px; height:30px; border-radius:50%; padding:0;
+    background:rgba(20,26,40,0.75); color:#fff; font-size:13px;
+    border:1px solid rgba(255,255,255,0.15); cursor:pointer;
+  }
+  #micBtn.on { background:#2c8a4b; }
+
+  #selfHpWrap { position:absolute; bottom:90px; left:50%; transform:translateX(-50%); width:220px; text-align:center; }
+  #selfHpBar { width:100%; height:10px; border-radius:6px; background:rgba(0,0,0,0.45); overflow:hidden; border:1px solid rgba(255,255,255,0.2); }
+  #selfHpFill { height:100%; width:100%; background:linear-gradient(90deg,#ff5252,#7ee08c); transition:width .15s ease; }
+  #ammoLine { margin-top:4px; color:#fff; font-size:11px; text-shadow:0 1px 2px #000; min-height:14px; }
+
+  #hotbar { position:absolute; bottom:16px; left:50%; transform:translateX(-50%); display:flex; gap:10px; pointer-events:all; }
+  .hotslot {
+    width:56px; height:56px; border-radius:12px; cursor:pointer;
+    background:rgba(10,14,24,0.72); border:2px solid rgba(255,255,255,0.15);
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    color:#fff; font-size:21px; position:relative;
+  }
+  .hotslot .key { position:absolute; top:3px; left:6px; font-size:10px; color:#9aa7c7; }
+  .hotslot .sub { font-size:9px; color:#cdd7f5; margin-top:1px; }
+  .hotslot.active { border-color:#5b8dff; background:rgba(91,141,255,0.28); }
 
   #chatWrap {
     position:fixed; left:14px; bottom:60px; width:320px; max-width:70vw; z-index:22;
@@ -128,12 +152,26 @@
 <div id="hud">
   <div id="crosshair"></div>
   <div id="interactHint">Нажмите E</div>
-  <div id="hint">WASD — идти · Shift — бежать · Space — прыжок · E — взаимодействие · Enter — чат</div>
-  <div id="topLeft">Комната: <b id="roomLabel"></b><br>Игроков онлайн: <b id="playerCount">1</b></div>
+  <div id="infoWrap">
+    <div id="infoBtn">i</div>
+    <div id="infoPanel">
+      Комната: <b id="roomLabel"></b><br>
+      Игроков онлайн: <b id="playerCount">1</b><br><br>
+      WASD — идти · Shift — бег<br>
+      Space — прыжок · E — дверь<br>
+      1/2/3 — предмет · R — перезарядка<br>
+      ЛКМ/ПКМ — действие · Enter — чат
+    </div>
+  </div>
+  <div id="selfHpWrap">
+    <div id="selfHpBar"><div id="selfHpFill"></div></div>
+    <div id="ammoLine"></div>
+  </div>
+  <div id="hotbar"></div>
 </div>
 
 <div id="controls">
-  <button class="micBtn" id="micBtn">🎤 Включить микрофон</button>
+  <button id="micBtn" title="Микрофон">🎤</button>
 </div>
 
 <div id="chatWrap">
@@ -165,6 +203,12 @@ const STATE_SEND_MS = 70;      // client -> host state rate
 const SYNC_TICK_MS = 100;      // host -> all broadcast rate
 const WORLD_HALF = 46;
 const AVATAR_COLORS = [0xff6b6b,0x5b8dff,0x7ee08c,0xffd166,0xc792ea,0xff9f43,0x4dd0e1,0xf78fb3];
+
+const MAX_HP = 100;
+const PUNCH_RANGE = 2.6, PUNCH_DAMAGE = 8, PUNCH_KNOCK = 3.2, PUNCH_COOLDOWN_MS = 380;
+const HOLD_RANGE = 4.2, HOLD_DISTANCE = 1.6, THROW_FORCE = 5;
+const GUN_RANGE = 80, GUN_DAMAGE = 16, GUN_MAG = 12, GUN_RELOAD_MS = 1500, GUN_FIRE_COOLDOWN_MS = 220, GUN_OBJECT_PUSH = 6;
+const HOOK_RANGE = 45, HOOK_PLAYER_SPEED = 20, HOOK_OBJECT_PULL = 9, HOOK_TIMEOUT_MS = 1400;
 
 /* ============================== ROOM / URL ============================== */
 function qparam(k){ return new URLSearchParams(location.search).get(k); }
@@ -242,11 +286,16 @@ const ground = new THREE.Mesh(
 );
 ground.rotation.x = -Math.PI/2;
 ground.receiveShadow = true;
+ground.raycast = function(){}; // ground shouldn't be a weapon/hook target
 scene.add(ground);
+
+// Shared raycaster used for punch/gun/hook aiming (reused to avoid per-shot allocation).
+const raycaster = new THREE.Raycaster();
 
 function addStrip(w,d,x,z,color,y){
   const m = new THREE.Mesh(new THREE.PlaneGeometry(w,d), new THREE.MeshStandardMaterial({color, roughness:0.95}));
   m.rotation.x = -Math.PI/2; m.position.set(x,y||0.02,z); m.receiveShadow=true;
+  m.raycast = function(){}; // roads/sidewalks aren't valid weapon/hook targets
   scene.add(m); return m;
 }
 // Roads (cross shape) + sidewalks
@@ -401,7 +450,9 @@ function addObject(id, type, x, z, radius, color){
   mesh.position.set(x, type==='ball'?radius:radius*0.8, z);
   mesh.castShadow = true;
   scene.add(mesh);
-  objects.push({id,type,mesh,pos:{x,z},vel:{x:0,z:0},radius,targetPos:{x,z}});
+  const rec = {id,type,mesh,pos:{x,z},vel:{x:0,z:0},radius,targetPos:{x,z}, heldBy:null, pullTowards:null, pullExpire:0};
+  mesh.userData.objRef = rec;
+  objects.push(rec);
 }
 addObject('obj1','ball', 3, 6, 0.45, 0xff5252);
 addObject('obj2','barrel', -3, 7, 0.5, 0x8a5a2a);
@@ -413,20 +464,43 @@ function pickColor(id){
   return AVATAR_COLORS[h % AVATAR_COLORS.length];
 }
 
-function makeNameSprite(text){
-  const c = document.createElement('canvas'); c.width=256; c.height=64;
+function roundRect(ctx,x,y,w,h,r){ ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); }
+
+// Combined name + HP bar sprite. Reuses one canvas/texture and only redraws
+// when name or hp actually changed, to keep this cheap even at high tick rates.
+function createNameHpSprite(){
+  const c = document.createElement('canvas'); c.width=256; c.height=84;
   const ctx = c.getContext('2d');
-  ctx.fillStyle = 'rgba(0,0,0,0.4)'; roundRect(ctx,8,14,240,36,10); ctx.fill();
-  ctx.fillStyle = '#fff'; ctx.font='bold 26px sans-serif'; ctx.textAlign='center';
-  ctx.fillText(text, 128, 40);
   const tex = new THREE.CanvasTexture(c);
   const mat = new THREE.SpriteMaterial({map:tex, depthTest:false});
   const spr = new THREE.Sprite(mat);
-  spr.scale.set(1.6,0.4,1);
+  spr.scale.set(1.6,0.52,1);
   spr.renderOrder = 999;
+  spr.raycast = function(){}; // never a valid weapon/hook target
+  spr.userData.canvas = c; spr.userData.ctx = ctx; spr.userData.texture = tex;
+  spr.userData.lastName = null; spr.userData.lastHp = null;
   return spr;
 }
-function roundRect(ctx,x,y,w,h,r){ ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); }
+function drawNameHp(spr, name, hp){
+  const hpv = hp==null ? MAX_HP : Math.max(0, hp);
+  if(spr.userData.lastName===name && spr.userData.lastHp===hpv) return;
+  spr.userData.lastName = name; spr.userData.lastHp = hpv;
+  const ctx = spr.userData.ctx, c = spr.userData.canvas;
+  ctx.clearRect(0,0,c.width,c.height);
+  ctx.fillStyle = 'rgba(0,0,0,0.4)'; roundRect(ctx,8,4,240,36,10); ctx.fill();
+  ctx.fillStyle = '#fff'; ctx.font='bold 26px sans-serif'; ctx.textAlign='center';
+  ctx.fillText(name, 128, 30);
+  const bx=28, by=50, bw=200, bh=14;
+  ctx.fillStyle='rgba(0,0,0,0.5)'; roundRect(ctx,bx,by,bw,bh,6); ctx.fill();
+  const pct = Math.max(0, Math.min(1, hpv/MAX_HP));
+  const grad = ctx.createLinearGradient(bx,0,bx+bw,0);
+  grad.addColorStop(0,'#ff5252'); grad.addColorStop(1,'#7ee08c');
+  ctx.fillStyle = grad;
+  if(pct>0) roundRect(ctx,bx+1,by+1,Math.max(2,(bw-2)*pct),bh-2,5), ctx.fill();
+  ctx.strokeStyle='rgba(255,255,255,0.4)'; ctx.lineWidth=1;
+  roundRect(ctx,bx,by,bw,bh,6); ctx.stroke();
+  spr.userData.texture.needsUpdate = true;
+}
 
 function makeEmojiSprite(emoji){
   const c = document.createElement('canvas'); c.width=96; c.height=96;
@@ -436,10 +510,11 @@ function makeEmojiSprite(emoji){
   const tex = new THREE.CanvasTexture(c);
   const spr = new THREE.Sprite(new THREE.SpriteMaterial({map:tex, depthTest:false}));
   spr.scale.set(0.7,0.7,1); spr.renderOrder=1000;
+  spr.raycast = function(){};
   return spr;
 }
 
-function createAvatar(name, color){
+function createAvatar(name, color, id){
   const group = new THREE.Group();
   const skin = new THREE.MeshStandardMaterial({color});
   const dark = new THREE.MeshStandardMaterial({color:0x2b2b33});
@@ -448,11 +523,13 @@ function createAvatar(name, color){
   torso.position.y = 1.06; torso.castShadow=true;
   const head = new THREE.Mesh(new THREE.BoxGeometry(0.36,0.36,0.36), skin);
   head.position.y = 1.56; head.castShadow=true;
+  if(id){ torso.userData.playerId = id; head.userData.playerId = id; }
 
   function limb(w,h,d,mat){
     const pivot = new THREE.Group();
     const mesh = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), mat);
     mesh.position.y = -h/2; mesh.castShadow=true;
+    if(id) mesh.userData.playerId = id;
     pivot.add(mesh);
     return pivot;
   }
@@ -463,8 +540,9 @@ function createAvatar(name, color){
 
   group.add(torso, head, lArm, rArm, lLeg, rLeg);
 
-  const nameSprite = makeNameSprite(name);
-  nameSprite.position.y = 2.05;
+  const nameSprite = createNameHpSprite();
+  drawNameHp(nameSprite, name, MAX_HP);
+  nameSprite.position.y = 2.1;
   group.add(nameSprite);
 
   scene.add(group);
@@ -502,23 +580,39 @@ const local = {
   pitch: 0,
   keys: {},
   name: '',
+  hp: MAX_HP,
+  item: 'hand',
+  gun: {mag:GUN_MAG, reloading:false, lastFire:0},
+  lastPunch: 0,
+  holding: null,       // id of object currently held (hand, RMB)
+  grapple: null,       // {point, start} while hook is pulling the player
+  pullingObjId: null,  // object id the hook is currently pulling toward us
+  pullingUntil: 0,
 };
 
 function clamp(v,a,b){ return Math.max(a,Math.min(b,v)); }
 
+// FIX (camera jitter): resolving against overlapping colliders in a single pass
+// let the player's position bounce between two neighboring wall segments at
+// building corners/doorways (each pass "solves" one collider but re-creates a
+// tiny overlap with the other), which read as a camera shake near buildings.
+// Iterating a few times per frame lets the position converge to a stable spot
+// before it's ever handed to the camera.
 function resolveWallCollision(pos){
-  for(const c of colliders){
-    if(c.isDoor && c.doorRef && c.doorRef.open) continue;
-    const cx = clamp(pos.x, c.minX, c.maxX);
-    const cz = clamp(pos.z, c.minZ, c.maxZ);
-    const dx = pos.x - cx, dz = pos.z - cz;
-    const distSq = dx*dx + dz*dz;
-    const r = PLAYER_RADIUS;
-    if(distSq < r*r){
-      const dist = Math.sqrt(distSq) || 0.0001;
-      const overlap = r - dist;
-      pos.x += (dx/dist) * overlap;
-      pos.z += (dz/dist) * overlap;
+  for(let iter=0; iter<3; iter++){
+    for(const c of colliders){
+      if(c.isDoor && c.doorRef && c.doorRef.open) continue;
+      const cx = clamp(pos.x, c.minX, c.maxX);
+      const cz = clamp(pos.z, c.minZ, c.maxZ);
+      const dx = pos.x - cx, dz = pos.z - cz;
+      const distSq = dx*dx + dz*dz;
+      const r = PLAYER_RADIUS;
+      if(distSq < r*r){
+        const dist = Math.sqrt(distSq) || 0.0001;
+        const overlap = r - dist;
+        pos.x += (dx/dist) * overlap;
+        pos.z += (dz/dist) * overlap;
+      }
     }
   }
 }
@@ -528,12 +622,45 @@ canvas.addEventListener('click', ()=>{
   if(el.joinScreen.style.display !== 'none') return;
   if(document.pointerLockElement !== canvas) canvas.requestPointerLock();
 });
+
+// FIX (camera jitter): browsers commonly report one huge movementX/Y spike on
+// the very first mousemove right after pointer lock engages (or re-engages,
+// e.g. after closing chat) — applying that raw delta produced a visible camera
+// snap/jitter. We also clamp per-event deltas, since some mice/OS configs emit
+// occasional oversized movement samples that would otherwise cause a jump.
+let ignoreNextMouseDelta = false;
+document.addEventListener('pointerlockchange', ()=>{
+  if(document.pointerLockElement === canvas) ignoreNextMouseDelta = true;
+});
 document.addEventListener('mousemove', e=>{
   if(document.pointerLockElement !== canvas) return;
-  local.yaw -= e.movementX * 0.0022;
-  local.pitch -= e.movementY * 0.0022;
+  if(ignoreNextMouseDelta){ ignoreNextMouseDelta = false; return; }
+  const MAX_DELTA = 80;
+  const mxv = clamp(e.movementX||0, -MAX_DELTA, MAX_DELTA);
+  const myv = clamp(e.movementY||0, -MAX_DELTA, MAX_DELTA);
+  local.yaw -= mxv * 0.0022;
+  local.pitch -= myv * 0.0022;
   local.pitch = clamp(local.pitch, -1.3, 1.3);
 });
+
+canvas.addEventListener('contextmenu', e=>e.preventDefault());
+canvas.addEventListener('mousedown', e=>{
+  if(document.pointerLockElement !== canvas) return;
+  if(e.button===0) onPrimaryDown();
+  else if(e.button===2) onSecondaryDown();
+});
+canvas.addEventListener('mouseup', e=>{
+  if(e.button===0) onPrimaryUp();
+  else if(e.button===2) onSecondaryUp();
+});
+function onPrimaryDown(){
+  if(local.item==='hand') doPunch();
+  else if(local.item==='pistol') fireGun();
+  else if(local.item==='hook') fireHook();
+}
+function onPrimaryUp(){ /* single-action weapons, nothing to release */ }
+function onSecondaryDown(){ if(local.item==='hand') startHold(); }
+function onSecondaryUp(){ if(local.item==='hand') stopHolding(false); }
 
 let chatOpen = false;
 document.addEventListener('keydown', e=>{
@@ -544,6 +671,10 @@ document.addEventListener('keydown', e=>{
   local.keys[e.code] = true;
   if(e.code === 'Enter'){ openChat(); }
   if(e.code === 'KeyE'){ tryInteract(); }
+  if(e.code === 'Digit1'){ selectItem('hand'); }
+  if(e.code === 'Digit2'){ selectItem('pistol'); }
+  if(e.code === 'Digit3'){ selectItem('hook'); }
+  if(e.code === 'KeyR'){ reloadGun(); }
 });
 document.addEventListener('keyup', e=>{ local.keys[e.code] = false; });
 
@@ -599,18 +730,331 @@ function setDoorOpen(id, open, announce){
   if(announce) sendDoor(id, open);
 }
 
+/* ============================== HOTBAR / ITEMS ============================== */
+const ITEMS = [
+  {id:'hand', key:'1', icon:'✋', label:'Рука'},
+  {id:'pistol', key:'2', icon:'🔫', label:'Пистолет'},
+  {id:'hook', key:'3', icon:'🪝', label:'Крюк'},
+];
+function buildHotbar(){
+  el.hotbar.innerHTML = '';
+  ITEMS.forEach(it=>{
+    const d = document.createElement('div');
+    d.className = 'hotslot' + (local.item===it.id ? ' active' : '');
+    d.innerHTML = '<div class="key">'+it.key+'</div><div>'+it.icon+'</div><div class="sub">'+it.label+'</div>';
+    // stopPropagation so clicking the hotbar never falls through to the
+    // canvas (which would otherwise try to (re)acquire pointer lock or be
+    // misread as a weapon click).
+    d.addEventListener('mousedown', e=>e.stopPropagation());
+    d.addEventListener('click', e=>{ e.stopPropagation(); selectItem(it.id); });
+    el.hotbar.appendChild(d);
+  });
+}
+function selectItem(id){
+  if(local.item === id) return;
+  stopHolding(true);
+  cancelGrapple();
+  local.item = id;
+  buildHotbar();
+  updateAmmoUI();
+}
+function updateSelfHpUI(){
+  el.selfHpFill.style.width = Math.max(0, local.hp) + '%';
+}
+function updateAmmoUI(){
+  if(local.item !== 'pistol'){ el.ammoLine.textContent = ''; return; }
+  el.ammoLine.textContent = local.gun.reloading ? 'Перезарядка…' : (local.gun.mag + ' / ' + GUN_MAG);
+}
+
+/* ============================== RAYCAST HELPERS ============================== */
+function camForwardVec(){
+  const v = new THREE.Vector3();
+  camera.getWorldDirection(v);
+  return v;
+}
+// Returns the nearest valid hit: {point, dist, playerId?} or {point, dist, objRef?}
+// or {point, dist, staticHit:true} for world geometry (buildings/trees/lamps/etc).
+// Objects currently held by the local player are skipped so you can't punch/
+// shoot/hook the thing you're carrying right in front of your own camera.
+function firstRaycastHit(){
+  const hits = raycaster.intersectObjects(scene.children, true);
+  for(const h of hits){
+    const o = h.object;
+    const ud = o.userData;
+    if(ud && ud.objRef && ud.objRef.heldBy === selfId) continue;
+    if(ud && ud.playerId) return {point:h.point, dist:h.distance, playerId:ud.playerId};
+    if(ud && ud.objRef) return {point:h.point, dist:h.distance, objRef:ud.objRef};
+    return {point:h.point, dist:h.distance, staticHit:true};
+  }
+  return null;
+}
+
+/* ============================== SCREEN / ROPE FX ============================== */
+function screenFlash(color){
+  const f = document.createElement('div');
+  f.style.cssText = 'position:fixed;inset:0;background:'+color+';opacity:0.35;pointer-events:none;z-index:29;transition:opacity .3s ease;';
+  document.body.appendChild(f);
+  requestAnimationFrame(()=>{ f.style.opacity = '0'; });
+  setTimeout(()=>f.remove(), 350);
+}
+function flashDamage(){ screenFlash('rgba(255,0,0,0.5)'); }
+
+function showTracer(a, b){
+  const geo = new THREE.BufferGeometry().setFromPoints([a,b]);
+  const mat = new THREE.LineBasicMaterial({color:0xfff2b0});
+  const line = new THREE.Line(geo, mat);
+  line.raycast = function(){};
+  scene.add(line);
+  setTimeout(()=>{ scene.remove(line); geo.dispose(); mat.dispose(); }, 90);
+}
+
+let ropeLine = null;
+function ensureRopeLine(){
+  if(ropeLine) return ropeLine;
+  const geo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]);
+  const mat = new THREE.LineBasicMaterial({color:0x2b2b33});
+  ropeLine = new THREE.Line(geo, mat);
+  ropeLine.raycast = function(){};
+  ropeLine.visible = false;
+  scene.add(ropeLine);
+  return ropeLine;
+}
+function updateRopeLine(a, b){
+  const line = ensureRopeLine();
+  const pos = line.geometry.attributes.position;
+  pos.setXYZ(0, a.x, a.y, a.z);
+  pos.setXYZ(1, b.x, b.y, b.z);
+  pos.needsUpdate = true;
+  line.visible = true;
+}
+function hideRopeLine(){ if(ropeLine) ropeLine.visible = false; }
+
+/* ============================== DAMAGE ============================== */
+// Each player is authoritative over their own HP: a hit message is routed
+// (directly, or relayed through the host) to the target, who applies the
+// damage to themselves and broadcasts the new hp on their next state/sync
+// message. This avoids needing a full client-to-client mesh for combat.
+function routeToTarget(targetId, msg){
+  if(targetId === selfId){ applyDamageSelf(msg.dmg, msg.knock); return; }
+  if(isHost){
+    if(connections[targetId]){ try{ connections[targetId].send(msg); }catch(e){} }
+  } else if(hostConn && hostConn.open){
+    try{ hostConn.send(msg); }catch(e){}
+  }
+}
+function sendHit(targetId, dmg, dir){
+  const knock = {x:dir.x*PUNCH_KNOCK, z:dir.z*PUNCH_KNOCK};
+  routeToTarget(targetId, {t:'hit', targetId, dmg, knock});
+}
+function applyDamageSelf(dmg, knock){
+  local.hp = Math.max(0, local.hp - dmg);
+  if(knock){
+    local.pos.x += knock.x*0.12; local.pos.z += knock.z*0.12;
+    resolveWallCollision(local.pos);
+  }
+  updateSelfHpUI();
+  flashDamage();
+  if(local.hp <= 0) respawnLocal();
+}
+function respawnLocal(){
+  local.hp = MAX_HP;
+  local.pos.set((Math.random()-0.5)*10, 0, 10+Math.random()*2);
+  local.vy = 0;
+  local.grapple = null; local.pullingObjId = null; hideRopeLine();
+  if(local.holding) stopHolding(true);
+  updateSelfHpUI();
+}
+
+/* ============================== OBJECT IMPULSES (host-authoritative) ============================== */
+function impulseObject(objRef, dir, force){
+  if(objRef.heldBy) return;
+  if(isHost){
+    objRef.vel.x += dir.x*force;
+    objRef.vel.z += dir.z*force;
+  } else if(hostConn && hostConn.open){
+    try{ hostConn.send({t:'impulse', objId:objRef.id, dx:dir.x, dz:dir.z, force}); }catch(e){}
+  }
+}
+
+/* ============================== HAND: PUNCH + HOLD ============================== */
+function doPunch(){
+  const now = performance.now();
+  if(now - local.lastPunch < PUNCH_COOLDOWN_MS) return;
+  local.lastPunch = now;
+  const dir = camForwardVec();
+  raycaster.set(camera.position, dir);
+  raycaster.far = PUNCH_RANGE;
+  const hit = firstRaycastHit();
+  if(hit){
+    if(hit.playerId) sendHit(hit.playerId, PUNCH_DAMAGE, dir);
+    else if(hit.objRef) impulseObject(hit.objRef, dir, PUNCH_KNOCK);
+  }
+}
+function sendHoldMsg(objId, holding, throwVel){
+  const msg = {t:'hold', objId, holderId:selfId, holding, throwVel:throwVel||null};
+  if(isHost) relay(selfId, msg);
+  else if(hostConn && hostConn.open){ try{ hostConn.send(msg); }catch(e){} }
+}
+function startHold(){
+  if(local.item!=='hand' || local.holding) return;
+  const dir = camForwardVec();
+  raycaster.set(camera.position, dir);
+  raycaster.far = HOLD_RANGE;
+  const hit = firstRaycastHit();
+  if(hit && hit.objRef && !hit.objRef.heldBy){
+    local.holding = hit.objRef.id;
+    hit.objRef.heldBy = selfId;
+    hit.objRef.vel.x = 0; hit.objRef.vel.z = 0;
+    hit.objRef.pullTowards = null;
+    sendHoldMsg(hit.objRef.id, true, null);
+  }
+}
+function stopHolding(silent){
+  if(!local.holding) return;
+  const id = local.holding;
+  const o = objects.find(x=>x.id===id);
+  local.holding = null;
+  let throwVel = null;
+  if(o){
+    o.heldBy = null;
+    if(!silent){
+      const dir = camForwardVec();
+      throwVel = {x:dir.x*THROW_FORCE, z:dir.z*THROW_FORCE};
+      if(isHost){ o.vel.x = throwVel.x; o.vel.z = throwVel.z; }
+    }
+  }
+  sendHoldMsg(id, false, throwVel);
+}
+function getHolderTransform(id){
+  if(id===selfId) return {x:local.pos.x, z:local.pos.z, yaw:local.yaw};
+  const r = remote[id];
+  if(!r) return null;
+  return {x:r.avatar.group.position.x, z:r.avatar.group.position.z, yaw:r.avatar.group.rotation.y};
+}
+function updateHeldObjectPositions(){
+  for(const o of objects){
+    if(!o.heldBy) continue;
+    const t = getHolderTransform(o.heldBy);
+    if(!t) continue;
+    const hx = -Math.sin(t.yaw), hz = -Math.cos(t.yaw);
+    const x = t.x + hx*HOLD_DISTANCE, z = t.z + hz*HOLD_DISTANCE;
+    o.pos.x = x; o.pos.z = z;
+    o.mesh.position.set(x, (o.type==='ball'?o.radius:o.radius*0.8) + 0.9, z);
+    o.vel.x = 0; o.vel.z = 0;
+  }
+}
+
+/* ============================== PISTOL ============================== */
+function fireGun(){
+  const now = performance.now();
+  if(local.gun.reloading) return;
+  if(now - local.gun.lastFire < GUN_FIRE_COOLDOWN_MS) return;
+  if(local.gun.mag <= 0){ reloadGun(); return; }
+  local.gun.lastFire = now;
+  local.gun.mag--;
+  updateAmmoUI();
+  const dir = camForwardVec();
+  const origin = camera.position.clone();
+  raycaster.set(origin, dir);
+  raycaster.far = GUN_RANGE;
+  const hit = firstRaycastHit();
+  const endPoint = hit ? hit.point : origin.clone().add(dir.clone().multiplyScalar(GUN_RANGE));
+  if(hit){
+    if(hit.playerId) sendHit(hit.playerId, GUN_DAMAGE, dir);
+    else if(hit.objRef) impulseObject(hit.objRef, dir, GUN_OBJECT_PUSH);
+  }
+  showTracer(origin, endPoint);
+  if(local.gun.mag<=0) reloadGun();
+}
+function reloadGun(){
+  if(local.gun.reloading || local.gun.mag===GUN_MAG) return;
+  local.gun.reloading = true;
+  updateAmmoUI();
+  setTimeout(()=>{
+    local.gun.mag = GUN_MAG;
+    local.gun.reloading = false;
+    updateAmmoUI();
+  }, GUN_RELOAD_MS);
+}
+
+/* ============================== GRAPPLING HOOK ============================== */
+function fireHook(){
+  if(local.grapple || local.pullingObjId) return;
+  const dir = camForwardVec();
+  raycaster.set(camera.position, dir);
+  raycaster.far = HOOK_RANGE;
+  const hit = firstRaycastHit();
+  if(!hit) return;
+  if(hit.objRef && !hit.playerId){
+    // Pulls the pushable object toward the player.
+    if(isHost){
+      hit.objRef.pullTowards = selfId;
+      hit.objRef.pullExpire = performance.now() + HOOK_TIMEOUT_MS;
+    } else if(hostConn && hostConn.open){
+      try{ hostConn.send({t:'grapple', objId:hit.objRef.id, attackerId:selfId}); }catch(e){}
+    }
+    local.pullingObjId = hit.objRef.id;
+    local.pullingUntil = performance.now() + HOOK_TIMEOUT_MS;
+  } else {
+    // Pulls the player toward a building/tree/player/etc.
+    local.grapple = {point:hit.point.clone(), start:performance.now()};
+  }
+}
+function cancelGrapple(){
+  local.grapple = null;
+  local.pullingObjId = null;
+  hideRopeLine();
+}
+function updateGrapple(dt){
+  if(local.grapple){
+    const g = local.grapple;
+    if(performance.now() - g.start > HOOK_TIMEOUT_MS){ local.grapple = null; hideRopeLine(); return; }
+    const dx = g.point.x - local.pos.x, dz = g.point.z - local.pos.z;
+    const dist = Math.hypot(dx,dz);
+    if(dist < 0.6){ local.grapple = null; hideRopeLine(); return; }
+    const step = Math.min(dist, HOOK_PLAYER_SPEED*dt);
+    local.pos.x += (dx/dist)*step;
+    local.pos.z += (dz/dist)*step;
+    resolveWallCollision(local.pos);
+    updateRopeLine(camera.position, g.point);
+  } else if(local.pullingObjId){
+    const o = objects.find(x=>x.id===local.pullingObjId);
+    if(!o || performance.now() > local.pullingUntil){ local.pullingObjId = null; hideRopeLine(); }
+    else { updateRopeLine(camera.position, o.mesh.position); }
+  } else {
+    hideRopeLine();
+  }
+}
+
 /* ============================== REMOTE PLAYERS ============================== */
 const remote = {}; // id -> {name, pos:{x,y,z}, yaw, anim, avatar}
 
 function ensureRemote(id, name){
-  if(remote[id]) { if(name) remote[id].name = name; return remote[id]; }
-  const av = createAvatar(name||'Игрок', pickColor(id));
-  remote[id] = {name:name||'Игрок', pos:{x:0,y:0,z:0}, yaw:0, avatar:av, targetPos:{x:0,z:0}};
+  if(remote[id]) {
+    if(name && remote[id].name !== name){
+      remote[id].name = name;
+      drawNameHp(remote[id].avatar.nameSprite, remote[id].name, remote[id].hp);
+    }
+    return remote[id];
+  }
+  const av = createAvatar(name||'Игрок', pickColor(id), id);
+  remote[id] = {name:name||'Игрок', pos:{x:0,y:0,z:0}, yaw:0, hp:MAX_HP, avatar:av, targetPos:{x:0,z:0}};
   updatePlayerCount();
   return remote[id];
 }
+function setRemoteHp(id, hp){
+  const r = remote[id];
+  if(!r || hp==null) return;
+  r.hp = hp;
+  drawNameHp(r.avatar.nameSprite, r.name, r.hp);
+}
 function removeRemote(id){
   if(!remote[id]) return;
+  // A departing player shouldn't leave an object stuck floating/attached.
+  objects.forEach(o=>{
+    if(o.heldBy===id) o.heldBy = null;
+    if(o.pullTowards===id) o.pullTowards = null;
+  });
   scene.remove(remote[id].avatar.group);
   delete remote[id];
   updatePlayerCount();
@@ -661,13 +1105,15 @@ let localStream = null;
 
 function send(obj){
   if(isHost){
-    for(const id in connections) connections[id].send(obj);
+    for(const id in connections){ try{ connections[id].send(obj); }catch(e){} }
   } else if(hostConn && hostConn.open){
-    hostConn.send(obj);
+    try{ hostConn.send(obj); }catch(e){}
   }
 }
 function relay(fromId, obj){
-  for(const id in connections){ if(id!==fromId) connections[id].send(obj); }
+  for(const id in connections){
+    if(id!==fromId){ try{ connections[id].send(obj); }catch(e){} }
+  }
 }
 
 function sendChat(text){
@@ -763,6 +1209,7 @@ function handleHostData(conn, data){
       const r = ensureRemote(conn.peer, data.name);
       r.targetPos = {x:data.x, z:data.z};
       r.yaw = data.yaw; r.speed = data.speed;
+      setRemoteHp(conn.peer, data.hp);
       relay(conn.peer, data);
       break;
     }
@@ -774,6 +1221,31 @@ function handleHostData(conn, data){
       break;
     }
     case 'door': setDoorOpen(data.id, data.open, false); relay(conn.peer, data); break;
+    case 'hit': {
+      // Forward a combat hit to whichever peer it's addressed to (may be us).
+      if(data.targetId === selfId){ applyDamageSelf(data.dmg, data.knock); }
+      else if(connections[data.targetId]){ try{ connections[data.targetId].send(data); }catch(e){} }
+      break;
+    }
+    case 'hold': {
+      const o = objects.find(x=>x.id===data.objId);
+      if(o){
+        if(data.holding){ o.heldBy = data.holderId; o.vel.x=0; o.vel.z=0; o.pullTowards=null; }
+        else { o.heldBy = null; if(data.throwVel){ o.vel.x = data.throwVel.x; o.vel.z = data.throwVel.z; } }
+      }
+      relay(conn.peer, data);
+      break;
+    }
+    case 'impulse': {
+      const o = objects.find(x=>x.id===data.objId);
+      if(o && !o.heldBy){ o.vel.x += data.dx*data.force; o.vel.z += data.dz*data.force; }
+      break;
+    }
+    case 'grapple': {
+      const o = objects.find(x=>x.id===data.objId);
+      if(o && !o.heldBy){ o.pullTowards = data.attackerId; o.pullExpire = performance.now()+HOOK_TIMEOUT_MS; }
+      break;
+    }
   }
 }
 
@@ -790,6 +1262,7 @@ function handleClientData(data){
       const r = ensureRemote(data.from);
       r.targetPos = {x:data.x, z:data.z};
       r.yaw = data.yaw; r.speed = data.speed;
+      setRemoteHp(data.from, data.hp);
       break;
     }
     case 'sync': {
@@ -797,10 +1270,11 @@ function handleClientData(data){
       const r = ensureRemote(HOST_ID, data.hostName);
       r.targetPos = {x:data.self.x, z:data.self.z};
       r.yaw = data.self.yaw; r.speed = data.self.speed;
+      setRemoteHp(HOST_ID, data.self.hp);
       // objects
       data.objects.forEach(o=>{
         const obj = objects.find(x=>x.id===o.id);
-        if(obj){ obj.targetPos.x = o.x; obj.targetPos.z = o.z; }
+        if(obj && !obj.heldBy){ obj.targetPos.x = o.x; obj.targetPos.z = o.z; }
       });
       break;
     }
@@ -815,6 +1289,12 @@ function handleClientData(data){
       Object.keys(data.doors).forEach(id=>{
         if(doors[id]) setDoorOpen(id, data.doors[id], false);
       });
+      break;
+    }
+    case 'hit': applyDamageSelf(data.dmg, data.knock); break;
+    case 'hold': {
+      const o = objects.find(x=>x.id===data.objId);
+      if(o) o.heldBy = data.holding ? data.holderId : null;
       break;
     }
   }
@@ -860,7 +1340,7 @@ document.getElementById('micBtn').addEventListener('click', async ()=>{
   if(!localStream){
     try{
       localStream = await navigator.mediaDevices.getUserMedia({audio:true});
-      btn.textContent = '🎤 Микрофон включён'; btn.classList.add('on');
+      btn.classList.add('on'); btn.title = 'Микрофон включён';
       const ids = Object.keys(remote).concat(isHost?[]:[HOST_ID]).filter(id=>id!==selfId);
       // also include connections on host side
       Object.keys(connections).forEach(id=>{ if(ids.indexOf(id)===-1) ids.push(id); });
@@ -871,8 +1351,8 @@ document.getElementById('micBtn').addEventListener('click', async ()=>{
   } else {
     const track = localStream.getAudioTracks()[0];
     track.enabled = !track.enabled;
-    btn.textContent = track.enabled ? '🎤 Микрофон включён' : '🔇 Микрофон выключен';
     btn.classList.toggle('on', track.enabled);
+    btn.title = track.enabled ? 'Микрофон включён' : 'Микрофон выключен';
   }
 });
 
@@ -885,7 +1365,9 @@ function networkTick(t){
     if(t - lastStateSend > STATE_SEND_MS && hostConn && hostConn.open){
       lastStateSend = t;
       const speed = currentSpeedFactor;
-      hostConn.send({t:'state', from:selfId, name:local.name, x:local.pos.x, z:local.pos.z, yaw:local.yaw, speed});
+      try{
+        hostConn.send({t:'state', from:selfId, name:local.name, x:local.pos.x, z:local.pos.z, yaw:local.yaw, speed, hp:local.hp});
+      }catch(e){}
     }
   }
 }
@@ -899,10 +1381,10 @@ function hostSyncTick(dt){
   const msg = {
     t:'sync',
     hostName: local.name,
-    self: {x:local.pos.x, z:local.pos.z, yaw:local.yaw, speed:currentSpeedFactor},
+    self: {x:local.pos.x, z:local.pos.z, yaw:local.yaw, speed:currentSpeedFactor, hp:local.hp},
     objects: objects.map(o=>({id:o.id, x:o.pos.x, z:o.pos.z}))
   };
-  for(const id in connections) connections[id].send(msg);
+  for(const id in connections){ try{ connections[id].send(msg); }catch(e){} }
 }
 
 function onNetworkReady(){
