@@ -79,7 +79,7 @@
     display:none; flex-direction:column; pointer-events:none;
   }
   #chatLog { display:flex; flex-direction:column; gap:4px; margin-bottom:8px; max-height:180px; overflow:hidden; }
-  #chatLog div { background:rgba(0,0,0,0.45); color:#fff; font-size:12.5px; padding:4px 9px; border-radius:6px; align-self:flex-start; max-width:100%; word-break:break-word; }
+  #chatLog div { background:rgba(0,0,0,0.45); color:#fff; font-size:12.5px; padding:4px 9px; border-radius:6px; align-self:flex-start; max-width:100%; word-break:break-word; opacity:1; transition:opacity .6s ease; }
   #chatLog div b { color:#9fd3ff; }
   #chatInputRow { display:none; pointer-events:all; }
   #chatInput {
@@ -186,6 +186,23 @@ document.getElementById('copyBtn').onclick = () => {
   navigator.clipboard && navigator.clipboard.writeText(inp.value).catch(()=>{});
   document.getElementById('copyBtn').textContent = 'Скопировано!';
   setTimeout(()=>document.getElementById('copyBtn').textContent='Копировать',1500);
+};
+
+/* ============================== CACHED DOM REFS (perf) ============================== */
+// Avoid repeated getElementById calls inside the render loop / hot paths.
+const el = {
+  interactHint: document.getElementById('interactHint'),
+  playerCount: document.getElementById('playerCount'),
+  chatLog: document.getElementById('chatLog'),
+  joinScreen: document.getElementById('joinScreen'),
+  hud: document.getElementById('hud'),
+  controls: document.getElementById('controls'),
+  chatWrap: document.getElementById('chatWrap'),
+  emojiBar: document.getElementById('emojiBar'),
+  chatInputRow: document.getElementById('chatInputRow'),
+  chatInput: document.getElementById('chatInput'),
+  disconnected: document.getElementById('disconnected'),
+  statusLine: document.getElementById('statusLine'),
 };
 
 /* ============================== THREE SETUP ============================== */
@@ -297,9 +314,14 @@ function makeBuilding(x, z, w, d, h, color, roofColor, name){
   group.add(lamp);
 
   // door leaf on a hinge pivot
+  // FIX: the pivot must sit exactly at the left edge of the door gap, which is
+  // centered on the building's local x = 0 (gap spans -doorWidth/2..doorWidth/2).
+  // The previous formula accidentally added `leftX` (the wall-segment offset),
+  // which shoved the whole door group sideways behind/into the wall segment —
+  // that's why doors looked "invisible": the mesh was there, just hidden in the wall.
   const doorId = 'd' + (doorAutoId++);
   const pivot = new THREE.Group();
-  pivot.position.set(leftX + segW/2 * 0 + ( -doorWidth/2 ), 0, d/2); // hinge at left edge of door gap
+  pivot.position.set(-doorWidth/2, 0, d/2); // hinge at left edge of door gap
   const leafMat = new THREE.MeshStandardMaterial({color:0x6b4226, roughness:0.7});
   const leaf = new THREE.Mesh(new THREE.BoxGeometry(doorWidth, doorHeight, thick*0.8), leafMat);
   leaf.position.set(doorWidth/2, doorHeight/2, 0);
@@ -503,7 +525,7 @@ function resolveWallCollision(pos){
 
 /* Pointer lock + mouse look */
 canvas.addEventListener('click', ()=>{
-  if(document.getElementById('joinScreen').style.display !== 'none') return;
+  if(el.joinScreen.style.display !== 'none') return;
   if(document.pointerLockElement !== canvas) canvas.requestPointerLock();
 });
 document.addEventListener('mousemove', e=>{
@@ -527,17 +549,21 @@ document.addEventListener('keyup', e=>{ local.keys[e.code] = false; });
 
 function openChat(){
   chatOpen = true;
+  // FIX: clear held movement keys so the player doesn't keep walking in the
+  // background (invisibly, since keydown repeats were being swallowed while
+  // typing) while the chat box is open.
+  local.keys = {};
   document.exitPointerLock && document.exitPointerLock();
-  document.getElementById('chatInputRow').style.display = 'block';
-  const inp = document.getElementById('chatInput');
-  inp.value=''; inp.focus();
+  el.chatInputRow.style.display = 'block';
+  el.chatInput.value=''; el.chatInput.focus();
 }
 function closeChat(){
   chatOpen = false;
-  document.getElementById('chatInputRow').style.display = 'none';
+  local.keys = {};
+  el.chatInputRow.style.display = 'none';
   canvas.requestPointerLock();
 }
-document.getElementById('chatInput').addEventListener('keydown', e=>{
+el.chatInput.addEventListener('keydown', e=>{
   e.stopPropagation();
   if(e.key === 'Enter'){
     const text = e.target.value.trim();
@@ -548,7 +574,7 @@ document.getElementById('chatInput').addEventListener('keydown', e=>{
   }
 });
 
-document.getElementById('emojiBar').addEventListener('click', e=>{
+el.emojiBar.addEventListener('click', e=>{
   const btn = e.target.closest('button'); if(!btn) return;
   sendEmoji(btn.dataset.e);
 });
@@ -590,17 +616,40 @@ function removeRemote(id){
   updatePlayerCount();
 }
 function updatePlayerCount(){
-  document.getElementById('playerCount').textContent = Object.keys(remote).length + 1;
+  el.playerCount.textContent = Object.keys(remote).length + 1;
 }
 
 /* ============================== CHAT ============================== */
+// Track pending fade/remove timeouts per message element so we can cancel
+// them if a message gets force-evicted early (fixes leaked timers and the
+// occasional "message pops back / glitches" symptom under heavy chat use).
+const chatTimeouts = new WeakMap();
+
 function addChatMessage(name, text){
-  const log = document.getElementById('chatLog');
+  const log = el.chatLog;
   const line = document.createElement('div');
   line.innerHTML = '<b>' + escapeHtml(name) + ':</b> ' + escapeHtml(text);
   log.appendChild(line);
-  while(log.children.length > 6) log.removeChild(log.firstChild);
-  setTimeout(()=>{ if(line.parentNode){ line.style.transition='opacity .6s'; line.style.opacity='0'; setTimeout(()=>line.remove(),600);} }, 9000);
+
+  while(log.children.length > 6){
+    const old = log.firstChild;
+    const oldTimeout = chatTimeouts.get(old);
+    if(oldTimeout) clearTimeout(oldTimeout);
+    chatTimeouts.delete(old);
+    log.removeChild(old);
+  }
+
+  const timeoutId = setTimeout(()=>{
+    if(line.parentNode){
+      // The CSS transition is defined in the stylesheet (#chatLog div), so
+      // simply changing opacity here reliably animates — no more instant
+      // "pop" disappearance that happened when transition + opacity were
+      // both set inline in the same synchronous tick.
+      line.style.opacity = '0';
+      setTimeout(()=>{ line.remove(); chatTimeouts.delete(line); }, 600);
+    }
+  }, 9000);
+  chatTimeouts.set(line, timeoutId);
 }
 function escapeHtml(s){ const d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
 
@@ -633,12 +682,12 @@ function sendEmoji(e){
 }
 function flashLocalEmoji(e){
   // simple on-screen flash near crosshair for our own reaction
-  const el = document.createElement('div');
-  el.textContent = e;
-  el.style.cssText = 'position:fixed;left:50%;top:46%;transform:translate(-50%,-50%);font-size:34px;z-index:30;pointer-events:none;transition:all .8s ease-out;opacity:1;';
-  document.body.appendChild(el);
-  requestAnimationFrame(()=>{ el.style.top='30%'; el.style.opacity='0'; });
-  setTimeout(()=>el.remove(),850);
+  const el2 = document.createElement('div');
+  el2.textContent = e;
+  el2.style.cssText = 'position:fixed;left:50%;top:46%;transform:translate(-50%,-50%);font-size:34px;z-index:30;pointer-events:none;transition:all .8s ease-out;opacity:1;';
+  document.body.appendChild(el2);
+  requestAnimationFrame(()=>{ el2.style.top='30%'; el2.style.opacity='0'; });
+  setTimeout(()=>el2.remove(),850);
 }
 function sendDoor(id, open){
   const msg = {t:'door', id, open};
@@ -699,7 +748,7 @@ function connectToHost(){
     onNetworkReady();
   });
   hostConn.on('data', data=>handleClientData(data));
-  hostConn.on('close', ()=>{ document.getElementById('disconnected').style.display='flex'; });
+  hostConn.on('close', ()=>{ el.disconnected.style.display='flex'; });
 }
 
 function handleHostData(conn, data){
@@ -827,7 +876,7 @@ document.getElementById('micBtn').addEventListener('click', async ()=>{
   }
 });
 
-function setStatus(msg){ document.getElementById('statusLine').textContent = msg; }
+function setStatus(msg){ el.statusLine.textContent = msg; }
 
 let lastStateSend = 0;
 function networkTick(t){
@@ -857,11 +906,11 @@ function hostSyncTick(dt){
 }
 
 function onNetworkReady(){
-  document.getElementById('joinScreen').style.display = 'none';
-  document.getElementById('hud').style.display = 'block';
-  document.getElementById('controls').style.display = 'flex';
-  document.getElementById('chatWrap').style.display = 'flex';
-  document.getElementById('emojiBar').style.display = 'flex';
+  el.joinScreen.style.display = 'none';
+  el.hud.style.display = 'block';
+  el.controls.style.display = 'flex';
+  el.chatWrap.style.display = 'flex';
+  el.emojiBar.style.display = 'flex';
   canvas.requestPointerLock();
   updatePlayerCount();
 }
@@ -915,13 +964,23 @@ function lerpObjectsToTarget(dt){
 let prevTime = performance.now();
 let currentSpeedFactor = 0;
 
+// Reused vectors to avoid per-frame allocation/GC churn (perf).
+const _forwardVec = new THREE.Vector3();
+const _rightVec = new THREE.Vector3();
+
+let lastInteractHintVisible = null;
 function updateInteractHint(){
   let near = false;
   for(const b of buildings){
     const dist = Math.hypot(local.pos.x-b.x, local.pos.z-(b.z+b.d/2));
     if(dist < 2.4){ near = true; break; }
   }
-  document.getElementById('interactHint').style.display = near ? 'block' : 'none';
+  // Only touch the DOM when the visibility actually changes (avoids a
+  // style write + reflow on every single frame).
+  if(near !== lastInteractHintVisible){
+    el.interactHint.style.display = near ? 'block' : 'none';
+    lastInteractHintVisible = near;
+  }
 }
 
 function updateDoors(dt){
@@ -940,13 +999,17 @@ function animate(){
   if(peer){
     // movement
     const k = local.keys;
-    const forward = new THREE.Vector3(Math.sin(local.yaw), 0, Math.cos(local.yaw));
-    const right = new THREE.Vector3(Math.cos(local.yaw), 0, -Math.sin(local.yaw));
+    // FIX: three.js camera forward (the direction you're actually looking)
+    // is (-sin(yaw), 0, -cos(yaw)) for rotation order YXZ with rotation.y = yaw.
+    // The old code used (sin(yaw), cos(yaw)) — the exact opposite vector —
+    // which is why W walked you backwards and S walked you forwards.
+    _forwardVec.set(-Math.sin(local.yaw), 0, -Math.cos(local.yaw));
+    _rightVec.set(Math.cos(local.yaw), 0, -Math.sin(local.yaw));
     let mx=0, mz=0;
-    if(k['KeyW']){ mx += forward.x; mz += forward.z; }
-    if(k['KeyS']){ mx -= forward.x; mz -= forward.z; }
-    if(k['KeyA']){ mx -= right.x; mz -= right.z; }
-    if(k['KeyD']){ mx += right.x; mz += right.z; }
+    if(k['KeyW']){ mx += _forwardVec.x; mz += _forwardVec.z; }
+    if(k['KeyS']){ mx -= _forwardVec.x; mz -= _forwardVec.z; }
+    if(k['KeyA']){ mx -= _rightVec.x; mz -= _rightVec.z; }
+    if(k['KeyD']){ mx += _rightVec.x; mz += _rightVec.z; }
     const len = Math.hypot(mx,mz);
     currentSpeedFactor = len>0 ? 1 : 0;
     if(len>0){ mx/=len; mz/=len; }
